@@ -1,120 +1,161 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from backend.schemas import StudentProfile, PredictionResponse
-import pandas as pd
 import sys
-import os
-import shap
+from pathlib import Path
 
-# Add ml_core to path so we can import patterns
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'ml_core')))
-from patterns.model_registry import ModelRegistry
+import pandas as pd
+import streamlit as st
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ML_CORE_DIR = PROJECT_ROOT / "ml_core"
+if str(ML_CORE_DIR) not in sys.path:
+    sys.path.append(str(ML_CORE_DIR))
+
 from patterns.data_factory import DataProcessorFactory
+from patterns.model_registry import ModelRegistry
 from patterns.model_strategy import RandomForestStrategy
 
-app = FastAPI(title="Student Placement Prediction API")
+st.set_page_config(page_title="Student Placement Predictor", page_icon="🎓", layout="wide")
 
-# Configure CORS for Vite Frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# Load Model Singleton on Startup
-@app.on_event("startup")
-def load_model():
+@st.cache_resource
+def load_model_bundle():
     registry = ModelRegistry()
-    model_data = registry.get_model()
-    if not model_data:
-        print("Warning: Model not found. Please run ml_core/train.py first.")
+    return registry.get_model()
 
-@app.post("/predict", response_model=PredictionResponse)
-def predict_placement(profile: StudentProfile):
-    registry = ModelRegistry()
-    model_data = registry.get_model()
-    if not model_data:
-        raise HTTPException(status_code=500, detail="Model is not trained yet.")
-        
-    model = model_data['model']
-    expected_columns = model_data['columns']
-    
-    # Create DataFrame from profile
-    df = pd.DataFrame([profile.dict()])
-    
-    # Process data
-    processor = DataProcessorFactory.get_processor("standard")
-    processor.expected_columns = expected_columns
-    X, _ = processor.preprocess(df, is_training=False)
-    
-    # Predict using Strategy
-    strategy = RandomForestStrategy()
-    prob = strategy.predict_proba(model, X)[0][1]
-    pred = strategy.predict(model, X)[0]
-    
-    # Generate dynamic recommendations based on input
-    recommendations = []
-    
-    # Feature Importance (SHAP)
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
-    
-    # In newer SHAP versions for binary classification, shap_values might be a list or array
-    if isinstance(shap_values, list):
-        # Index 1 is the positive class (Placed)
-        sv = shap_values[1][0]
-    elif len(shap_values.shape) == 3:
-        sv = shap_values[0, :, 1]
+
+@st.cache_data
+def load_dataset():
+    data_path = PROJECT_ROOT / "Dataset" / "Placement_Data_Full_Class.csv"
+    if not data_path.exists():
+        return None
+    return pd.read_csv(data_path)
+
+
+def get_feature_importance(model, X):
+    if hasattr(model, "feature_importances_"):
+        values = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        values = abs(model.coef_[0])
     else:
-        sv = shap_values[0]
-        
-    feature_impact = {}
-    for col, val in zip(X.columns, sv):
-        # Store impact formatted to 4 decimals
-        feature_impact[col] = round(float(val), 4)
+        values = [0.0] * len(X.columns)
 
-    # Use SHAP values to generate dynamic recommendations
-    # Find the feature that negatively impacted the score the most
-    if len(feature_impact) > 0:
-        worst_feature = min(feature_impact, key=feature_impact.get)
-        if worst_feature == 'workex_Yes':
-            recommendations.append("Prioritize getting an internship or part-time work experience; this heavily influences placement.")
-        elif worst_feature == 'mba_p':
-            recommendations.append("Your MBA percentage is pulling your score down. Focus intensely on core MBA subjects and case studies.")
-        elif worst_feature == 'degree_p':
-            recommendations.append("Your undergraduate degree score is a weak point. Highlight specific strong projects in your resume.")
-        elif worst_feature == 'etest_p':
-            recommendations.append("Your employability test score suggests you should practice aptitude and technical mock tests.")
-        elif worst_feature == 'academic_average':
-            recommendations.append("Your overall academic average is below expectations. Focus heavily on practical skills and certifications.")
-        else:
-            recommendations.append(f"Consider improving your profile related to {worst_feature}.")
+    importance_df = pd.DataFrame(
+        {"feature": X.columns, "importance": values}
+    ).sort_values("importance", ascending=False)
+
+    return importance_df.head(10)
+
+
+def get_recommendations(profile, probability):
+    recommendations = []
+
+    if probability < 0.5:
+        recommendations.append("Focus on academics, practical projects, and mock interviews to improve your chances.")
+    if profile["workex"] == "No":
+        recommendations.append("Gain internships or part-time work experience to strengthen your profile.")
+    if profile["degree_p"] < 70:
+        recommendations.append("Improve your degree performance and highlight relevant projects on your resume.")
+    if profile["etest_p"] < 60:
+        recommendations.append("Practice aptitude and technical mock tests to raise your employability score.")
+    if profile["mba_p"] < 70:
+        recommendations.append("Concentrate on core MBA subjects and case studies for better outcomes.")
 
     if not recommendations:
-        recommendations.append("Your profile is strong! Focus on mock interviews and resume polishing.")
-        
-    return PredictionResponse(
-        placement_probability=round(prob * 100, 2),
-        prediction="Placed" if pred == 1 else "Not Placed",
-        recommendations=recommendations,
-        feature_importance=feature_impact
-    )
+        recommendations.append("Your profile looks strong. Keep refining your resume and interview preparation.")
 
-@app.get("/analytics")
-def get_analytics():
-    data_path = os.path.join(os.path.dirname(__file__), '..', 'Dataset', 'Placement_Data_Full_Class.csv')
-    if not os.path.exists(data_path):
-        return {"error": "Dataset not found"}
-        
-    df = pd.read_csv(data_path)
-    
-    # Calculate some basic aggregations
-    specialisation_placement = df.groupby(['specialisation', 'status']).size().unstack(fill_value=0).to_dict(orient="index")
-    workex_placement = df.groupby(['workex', 'status']).size().unstack(fill_value=0).to_dict(orient="index")
-    
-    return {
-        "specialisation_stats": specialisation_placement,
-        "workex_stats": workex_placement
+    return recommendations
+
+
+def main():
+    st.title("🎓 Student Placement Predictor")
+    st.caption("A simple Streamlit app that predicts whether a student is likely to be placed based on academic and profile data.")
+
+    model_data = load_model_bundle()
+    if not model_data:
+        st.error("The trained model file is missing. Train the model first and refresh this page.")
+        st.stop()
+
+    model = model_data["model"]
+    expected_columns = model_data["columns"]
+
+    with st.sidebar:
+        st.header("Student profile")
+        gender = st.selectbox("Gender", ["M", "F"])
+        ssc_p = st.slider("SSC percentage", 0, 100, 70)
+        hsc_p = st.slider("HSC percentage", 0, 100, 75)
+        hsc_s = st.selectbox("HSC specialization", ["Commerce", "Science", "Arts"])
+        degree_p = st.slider("Degree percentage", 0, 100, 75)
+        degree_t = st.selectbox("Degree type", ["Sci&Tech", "Comm&Mgmt", "Others"])
+        workex = st.selectbox("Work experience", ["Yes", "No"])
+        etest_p = st.slider("E-test percentage", 0, 100, 70)
+        specialisation = st.selectbox("MBA specialization", ["Mkt&HR", "Mkt&Fin"])
+        mba_p = st.slider("MBA percentage", 0, 100, 75)
+
+        st.markdown("---")
+        st.write("Deploy this app on Streamlit Cloud or a server with:")
+        st.code("streamlit run app.py", language="bash")
+
+    profile = {
+        "gender": gender,
+        "ssc_p": ssc_p,
+        "hsc_p": hsc_p,
+        "hsc_s": hsc_s,
+        "degree_p": degree_p,
+        "degree_t": degree_t,
+        "workex": workex,
+        "etest_p": etest_p,
+        "specialisation": specialisation,
+        "mba_p": mba_p,
     }
+
+    if st.button("Predict placement", type="primary"):
+        df = pd.DataFrame([profile])
+        processor = DataProcessorFactory.get_processor("standard")
+        processor.expected_columns = expected_columns
+        X, _ = processor.preprocess(df, is_training=False)
+
+        strategy = RandomForestStrategy()
+        probability = strategy.predict_proba(model, X)[0][1]
+        prediction = strategy.predict(model, X)[0]
+
+        prediction_label = "Placed" if prediction == 1 else "Not Placed"
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Placement probability", f"{probability * 100:.2f}%")
+        col2.metric("Prediction", prediction_label)
+        col3.metric("Confidence", "High" if probability > 0.6 else "Moderate" if probability > 0.4 else "Low")
+
+        st.success(f"The model predicts: {prediction_label} with {probability * 100:.2f}% probability.")
+
+        with st.expander("Why this prediction?", expanded=True):
+            importance_df = get_feature_importance(model, X)
+            st.dataframe(importance_df, use_container_width=True, hide_index=True)
+
+        st.subheader("Recommended next steps")
+        for item in get_recommendations(profile, probability):
+            st.write(f"- {item}")
+
+    tab1, tab2 = st.tabs(["Overview", "Dataset insights"])
+    with tab1:
+        st.write("Use the sidebar to enter a student profile and get an instant placement prediction.")
+        st.write("The app reuses the trained model and preprocessing logic from the original project.")
+
+    with tab2:
+        dataset = load_dataset()
+        if dataset is None:
+            st.info("Dataset file is not available in the project folder.")
+        else:
+            st.write("Placement trends from the training data")
+            status_counts = dataset["status"].value_counts().rename(index={1: "Placed", 0: "Not Placed"})
+            st.bar_chart(status_counts)
+
+            placement_by_specialisation = (
+                dataset.groupby(["specialisation", "status"]).size().unstack(fill_value=0)
+            )
+            placement_by_specialisation = placement_by_specialisation.rename(index={1: "Placed", 0: "Not Placed"})
+            st.bar_chart(placement_by_specialisation)
+
+            st.dataframe(dataset.head(10), use_container_width=True)
+
+
+if __name__ == "__main__":
+    main()
