@@ -3,11 +3,6 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import streamlit as st
-try:
-    import matplotlib.pyplot as plt
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ML_CORE_DIR = PROJECT_ROOT / "ml_core"
@@ -25,46 +20,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── Exact CSS replica of localhost:5173 (React index.css + App.css) ─────────
+# ── Custom CSS for exact React/Vite replica (Glassmorphism & styling) ──
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;700&display=swap');
 
-/* ─── CSS Variables (from index.css :root) ───────────────────────── */
-:root {
-  --primary:       #6C5CE7;
-  --secondary:     #A29BFE;
-  --accent:        #FD79A8;
-  --bg-gradient-1: #0F2027;
-  --bg-gradient-2: #203A43;
-  --bg-gradient-3: #2C5364;
-  --text-light:    #F8F9FA;
-  --glass-bg:      rgba(255, 255, 255, 0.10);
-  --glass-border:  rgba(255, 255, 255, 0.20);
-}
-
-/* ─── Body / App Background ─────────────────────────────────────── */
-.stApp, .main, [data-testid="stAppViewContainer"] {
-  background: linear-gradient(135deg, var(--bg-gradient-1), var(--bg-gradient-2), var(--bg-gradient-3)) !important;
+/* ─── Global Styling ────────────────────────────────────────────── */
+.stApp {
+  background: linear-gradient(135deg, #0F2027, #203A43, #2C5364) !important;
   background-attachment: fixed !important;
   font-family: 'Inter', sans-serif !important;
-  color: var(--text-light) !important;
-  min-height: 100vh;
 }
+
+/* Hide Streamlit elements */
 [data-testid="stHeader"] { background: transparent !important; }
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stBottom"] { background: transparent !important; }
-.block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; max-width: 1200px !important; }
 
-/* ─── Typography ─────────────────────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 { font-family: 'Outfit', sans-serif !important; }
+/* Center block container */
+.block-container {
+  padding-top: 2rem !important;
+  padding-bottom: 2rem !important;
+  max-width: 1200px !important;
+}
 
-/* ─── Header (matches .header h1 in App.css) ────────────────────── */
-.site-header { text-align: center; padding: 1.5rem 0 2.5rem 0; }
+/* ─── Site Header ────────────────────────────────────────────────── */
+.site-header {
+  text-align: center;
+  padding: 1rem 0 2.5rem 0;
+}
 .site-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 3rem;
+  font-size: 3.2rem;
   font-weight: 700;
   background: linear-gradient(45deg, #FD79A8, #A29BFE);
   -webkit-background-clip: text;
@@ -72,133 +60,128 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Outfit', sans-serif !important; }
   margin-bottom: 0.5rem;
   line-height: 1.15;
 }
-.site-subtitle { font-size: 1.05rem; color: rgba(248,249,250,0.75); }
+.site-subtitle {
+  font-size: 1.1rem;
+  color: rgba(248, 249, 250, 0.75);
+}
 
-/* ─── Glass Panels (.glass-panel in index.css) ───────────────────── */
-.glass-panel {
-  background: var(--glass-bg) !important;
+/* ─── Native st.container (border=True) Glassmorphism styling ─── */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+  background: rgba(255, 255, 255, 0.06) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid var(--glass-border) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 16px !important;
-  box-shadow: 0 4px 30px rgba(0,0,0,0.15) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
   padding: 24px !important;
-  margin-bottom: 0 !important;
+  margin-bottom: 1.5rem !important;
 }
+
 .panel-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: #ffffff;
-  margin-bottom: 1.4rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
 }
 
-/* ─── Form Labels ────────────────────────────────────────────────── */
-.stSelectbox label, .stNumberInput label, .stTextInput label, .stSlider label {
+/* ─── Inputs and Selectors ───────────────────────────────────────── */
+label {
   font-weight: 600 !important;
-  font-size: 0.9rem !important;
   color: #cccccc !important;
-  font-family: 'Inter', sans-serif !important;
 }
 
-/* ─── Input Fields (.input-field in index.css) ───────────────────── */
-.stSelectbox > div > div,
-.stNumberInput > div > div > input,
-.stTextInput > div > div > input {
-  background: rgba(255,255,255,0.05) !important;
-  border: 1px solid var(--glass-border) !important;
-  border-radius: 8px !important;
-  color: white !important;
-  font-family: 'Inter', sans-serif !important;
-  padding: 10px 14px !important;
-  transition: border-color 0.3s !important;
-}
-.stSelectbox > div > div:focus-within,
-.stNumberInput > div > div > input:focus,
-.stTextInput > div > div > input:focus {
-  border-color: var(--secondary) !important;
-  outline: none !important;
-  box-shadow: 0 0 0 1px var(--secondary) !important;
-}
-/* Dropdown arrow and text color */
-.stSelectbox svg { fill: #ccc !important; }
-.stSelectbox span { color: white !important; }
-.stNumberInput input { color: white !important; }
-
-/* ─── Primary Button (.btn-primary in index.css) ─────────────────── */
+/* ─── Primary Button (.btn-primary) ───────────────────────────────── */
 div.stButton > button {
-  background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
+  background: linear-gradient(90deg, #6C5CE7, #A29BFE) !important;
   border: none !important;
   border-radius: 8px !important;
   padding: 12px 24px !important;
   color: white !important;
   font-weight: 600 !important;
   font-family: 'Inter', sans-serif !important;
-  font-size: 1rem !important;
+  font-size: 1.05rem !important;
   width: 100% !important;
   transition: transform 0.2s, box-shadow 0.2s !important;
   cursor: pointer !important;
-  margin-top: 0.5rem !important;
+  margin-top: 1rem !important;
 }
 div.stButton > button:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 0 4px 15px rgba(108,92,231,0.4) !important;
+  box-shadow: 0 4px 15px rgba(108, 92, 231, 0.5) !important;
+  color: white !important;
 }
 
-/* ─── Probability Circle ─────────────────────────────────────────── */
+/* ─── Probability Badge / Circle ─────────────────────────────────── */
+.prob-badge-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1.5rem 0;
+}
 .prob-circle {
-  width: 150px;
-  height: 150px;
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
-  border: 8px solid var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 1rem auto;
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 700;
   color: #ffffff;
   font-family: 'Outfit', sans-serif;
+  margin-bottom: 1rem;
 }
-.prob-circle-placed { border-color: #2ecc71 !important; box-shadow: 0 0 28px rgba(46,204,113,0.45); }
-.prob-circle-not   { border-color: #e74c3c !important; box-shadow: 0 0 28px rgba(231,76,60,0.45); }
+.prob-circle-placed {
+  border: 8px solid #2ecc71;
+  box-shadow: 0 0 24px rgba(46, 204, 113, 0.4);
+  background: rgba(46, 204, 113, 0.05);
+}
+.prob-circle-not {
+  border: 8px solid #e74c3c;
+  box-shadow: 0 0 24px rgba(231, 76, 60, 0.4);
+  background: rgba(231, 76, 60, 0.05);
+}
+.status-text {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.status-placed { color: #2ecc71; }
+.status-not-placed { color: #e74c3c; }
 
-/* ─── Status Text ────────────────────────────────────────────────── */
-.status-text { font-family:'Outfit',sans-serif; font-size:1.7rem; font-weight:700; text-align:center; margin-top:0.5rem; }
-.status-placed     { color:#2ecc71; }
-.status-not-placed { color:#e74c3c; }
+/* ─── Actionable Recommendations ─────────────────────────────────── */
+.rec-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 4px solid #A29BFE;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: #F8F9FA;
+  line-height: 1.5;
+}
 
 /* ─── Results Placeholder ────────────────────────────────────────── */
 .results-placeholder {
   text-align: center;
-  margin-top: 3rem;
-  color: rgba(255,255,255,0.55);
-  font-size: 1rem;
-  line-height: 1.7;
-  padding: 2rem;
+  margin: 4rem 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
-/* ─── Recommendations list ───────────────────────────────────────── */
-.rec-item {
-  background: rgba(255,255,255,0.06);
-  border-left: 3px solid var(--secondary);
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 10px;
-  font-size: 0.92rem;
-  color: var(--text-light);
-  line-height: 1.55;
+/* ─── Tabs styling ───────────────────────────────────────────────── */
+.stTabs [role="tab"] {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 1rem !important;
 }
-
-/* ─── Tabs ───────────────────────────────────────────────────────── */
-.stTabs [role="tab"] { color: rgba(255,255,255,0.6) !important; font-family:'Inter',sans-serif !important; }
-.stTabs [role="tab"][aria-selected="true"] { color: var(--accent) !important; border-bottom: 2px solid var(--accent) !important; }
-
-/* ─── DataFrame ──────────────────────────────────────────────────── */
-[data-testid="stDataFrame"] { border-radius:10px; overflow:hidden; }
-
-/* ─── Divider ─────────────────────────────────────────────────────── */
-hr { border-color: rgba(255,255,255,0.12) !important; margin: 1.5rem 0 !important; }
+.stTabs [role="tab"][aria-selected="true"] {
+  color: #FD79A8 !important;
+  border-bottom: 2px solid #FD79A8 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -229,6 +212,24 @@ def get_feature_importance(model, X):
         {"feature": X.columns, "importance": values}
     ).sort_values("importance", ascending=True)
 
+    # Friendly names for features
+    friendly_names = {
+        "ssc_p": "SSC % (10th)",
+        "hsc_p": "HSC % (12th)",
+        "degree_p": "Degree %",
+        "etest_p": "E-Test %",
+        "mba_p": "MBA %",
+        "academic_average": "Academic Avg",
+        "gender_M": "Gender: Male",
+        "hsc_s_Commerce": "HSC: Commerce",
+        "hsc_s_Science": "HSC: Science",
+        "degree_t_Others": "Degree: Others",
+        "degree_t_Sci&Tech": "Degree: Sci & Tech",
+        "workex_Yes": "Work Experience",
+        "specialisation_Mkt&Hr": "MBA Spec: Mkt & HR",
+        "specialisation_Mkt&Fin": "MBA Spec: Mkt & Fin"
+    }
+    importance_df["feature"] = importance_df["feature"].map(lambda x: friendly_names.get(x, x))
     return importance_df.tail(8)
 
 
@@ -266,124 +267,113 @@ def main():
     model = model_data["model"]
     expected_columns = model_data["columns"]
 
-    # ── Two-column layout (matches .content-grid 1fr 1fr) ───────────────────
-    col_left, col_right = st.columns([1, 1], gap="large")
+    # ── Two-column layout ───────────────────────────────────────────────────
+    col_left, col_right = st.columns([1.1, 0.9], gap="large")
 
     # ── LEFT PANEL: Student Profile ──────────────────────────────────────────
     with col_left:
-        st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="panel-title">Student Profile</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="panel-title">Student Profile</div>', unsafe_allow_html=True)
 
-        r1a, r1b = st.columns(2)
-        with r1a:
-            gender = st.selectbox("Gender", ["M", "F"], format_func=lambda x: "Male" if x == "M" else "Female")
-        with r1b:
-            workex = st.selectbox("Work Experience", ["No", "Yes"])
+            r1a, r1b = st.columns(2)
+            with r1a:
+                gender = st.selectbox("Gender", ["M", "F"], format_func=lambda x: "Male" if x == "M" else "Female")
+            with r1b:
+                workex = st.selectbox("Work Experience", ["No", "Yes"])
 
-        r2a, r2b = st.columns(2)
-        with r2a:
-            ssc_p = st.number_input("SSC % (10th)", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
-        with r2b:
-            hsc_p = st.number_input("HSC % (12th)", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
+            r2a, r2b = st.columns(2)
+            with r2a:
+                ssc_p = st.number_input("SSC % (10th)", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
+            with r2b:
+                hsc_p = st.number_input("HSC % (12th)", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
 
-        r3a, r3b = st.columns(2)
-        with r3a:
-            hsc_s = st.selectbox("HSC Specialisation", ["Commerce", "Science", "Arts"])
-        with r3b:
-            degree_p = st.number_input("Degree %", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
+            r3a, r3b = st.columns(2)
+            with r3a:
+                hsc_s = st.selectbox("HSC Specialisation", ["Commerce", "Science", "Arts"])
+            with r3b:
+                degree_p = st.number_input("Degree %", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
 
-        r4a, r4b = st.columns(2)
-        with r4a:
-            degree_t = st.selectbox("Degree Type", ["Comm&Mgmt", "Sci&Tech", "Others"])
-        with r4b:
-            etest_p = st.number_input("E-Test %", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
+            r4a, r4b = st.columns(2)
+            with r4a:
+                degree_t = st.selectbox("Degree Type", ["Comm&Mgmt", "Sci&Tech", "Others"])
+            with r4b:
+                etest_p = st.number_input("E-Test %", min_value=0.0, max_value=100.0, value=70.0, step=0.1, format="%.1f")
 
-        r5a, r5b = st.columns(2)
-        with r5a:
-            specialisation = st.selectbox("MBA Specialisation (Optional)", ["None", "Mkt&HR", "Mkt&Fin"],
-                                          format_func=lambda x: "None / Not Applicable" if x == "None" else x)
-        with r5b:
-            mba_p = st.number_input("MBA % (Optional)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.1f")
+            r5a, r5b = st.columns(2)
+            with r5a:
+                specialisation = st.selectbox("MBA Specialisation (Optional)", ["None", "Mkt&HR", "Mkt&Fin"],
+                                              format_func=lambda x: "None / Not Applicable" if x == "None" else x)
+            with r5b:
+                mba_p = st.number_input("MBA % (Optional)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.1f")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        predict_clicked = st.button("Predict Placement Probability", type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
+            predict_clicked = st.button("Predict Placement Probability", type="primary")
 
     # ── RIGHT PANEL: Prediction Results ──────────────────────────────────────
     with col_right:
-        st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="panel-title">Prediction Results</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="panel-title">Prediction Results</div>', unsafe_allow_html=True)
 
-        if predict_clicked:
-            profile = {
-                "gender":        gender,
-                "ssc_p":         ssc_p,
-                "hsc_p":         hsc_p,
-                "hsc_s":         hsc_s,
-                "degree_p":      degree_p,
-                "degree_t":      degree_t,
-                "workex":        workex,
-                "etest_p":       etest_p,
-                "specialisation": specialisation,
-                "mba_p":         mba_p if specialisation != "None" else 0.0,
-            }
+            if predict_clicked:
+                profile = {
+                    "gender":        gender,
+                    "ssc_p":         ssc_p,
+                    "hsc_p":         hsc_p,
+                    "hsc_s":         hsc_s,
+                    "degree_p":      degree_p,
+                    "degree_t":      degree_t,
+                    "workex":        workex,
+                    "etest_p":       etest_p,
+                    "specialisation": specialisation,
+                    "mba_p":         mba_p if specialisation != "None" else 0.0,
+                }
 
-            df = pd.DataFrame([profile])
-            processor = DataProcessorFactory.get_processor("standard")
-            processor.expected_columns = expected_columns
-            X, _ = processor.preprocess(df, is_training=False)
+                df = pd.DataFrame([profile])
+                processor = DataProcessorFactory.get_processor("standard")
+                processor.expected_columns = expected_columns
+                X, _ = processor.preprocess(df, is_training=False)
 
-            strategy = RandomForestStrategy()
-            probability = strategy.predict_proba(model, X)[0][1]
-            prediction  = strategy.predict(model, X)[0]
+                strategy = RandomForestStrategy()
+                probability = strategy.predict_proba(model, X)[0][1]
+                prediction  = strategy.predict(model, X)[0]
 
-            prediction_label  = "Placed" if prediction == 1 else "Not Placed"
-            circle_class = "prob-circle-placed" if prediction == 1 else "prob-circle-not"
-            status_class = "status-placed"      if prediction == 1 else "status-not-placed"
+                prediction_label  = "Placed" if prediction == 1 else "Not Placed"
+                circle_class = "prob-circle-placed" if prediction == 1 else "prob-circle-not"
+                status_class = "status-placed"      if prediction == 1 else "status-not-placed"
 
-            # Status + Circular Badge
-            st.markdown(f"""
-                <div class="status-text {status_class}">Status: {prediction_label}</div>
-                <div class="prob-circle {circle_class}">{probability * 100:.1f}%</div>
-            """, unsafe_allow_html=True)
+                # Status + Circular Badge
+                st.markdown(f"""
+                    <div class="prob-badge-container">
+                        <div class="prob-circle {circle_class}">{probability * 100:.1f}%</div>
+                        <div class="status-text {status_class}">Status: {prediction_label}</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-            # Feature Impact chart
-            st.markdown("#### 📊 Explainable AI (Feature Impact)")
-            importance_df = get_feature_importance(model, X)
+                # Feature Impact chart
+                st.markdown("#### 📊 Explainable AI (Feature Impact)")
+                importance_df = get_feature_importance(model, X)
+                
+                # Render native interactive Streamlit horizontal bar chart matching the page style
+                st.bar_chart(
+                    importance_df, 
+                    x="feature", 
+                    y="importance", 
+                    color="#FD79A8",
+                    use_container_width=True
+                )
 
-            if HAS_MATPLOTLIB:
-                fig, ax = plt.subplots(figsize=(7, 3.0))
-                fig.patch.set_facecolor('none')
-                ax.set_facecolor('none')
-                colors = ['#2ecc71' if v >= 0 else '#e74c3c' for v in importance_df['importance']]
-                ax.barh(importance_df['feature'], importance_df['importance'], color=colors, height=0.55)
-                ax.tick_params(colors='#cccccc', labelsize=9)
-                for spine in ax.spines.values():
-                    spine.set_color('rgba(255,255,255,0.15)')
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                ax.xaxis.label.set_color('#ccc')
-                ax.yaxis.label.set_color('#ccc')
-                fig.tight_layout()
-                st.pyplot(fig, transparent=True)
+                # Recommendations
+                st.markdown("#### 💡 Actionable Recommendations")
+                for rec in get_recommendations(profile, probability):
+                    st.markdown(f'<div class="rec-item">• {rec}</div>', unsafe_allow_html=True)
+
             else:
-                st.dataframe(importance_df, use_container_width=True, hide_index=True)
-
-            # Recommendations
-            st.markdown("#### 💡 Actionable Recommendations")
-            for rec in get_recommendations(profile, probability):
-                st.markdown(f'<div class="rec-item">• {rec}</div>', unsafe_allow_html=True)
-
-        else:
-            st.markdown("""
-                <div class="results-placeholder">
-                    Enter your profile details and click<br>
-                    <strong>Predict Placement Probability</strong><br>
-                    to see your placement probability and AI recommendations.
-                </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("""
+                    <div class="results-placeholder">
+                        Enter your profile details and click<br>
+                        <strong>Predict Placement Probability</strong><br>
+                        to see your placement probability and AI recommendations.
+                    </div>
+                """, unsafe_allow_html=True)
 
     # ── Bottom Tabs ──────────────────────────────────────────────────────────
     st.markdown("<hr>", unsafe_allow_html=True)
